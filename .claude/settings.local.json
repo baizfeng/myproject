@@ -9,7 +9,14 @@
       "Bash(c:/miniconda3/envs/rs/python.exe -c \"import sys; sys.path.insert\\(0, ''e:/hxcode/Arspy_ai''\\); from arspy import Filename; p = Filename.parse\\(''BEI_YH1C_IRSR_20250102_232001_R0500M_L1.hdf''\\); print\\(''解析:'', p\\); o = Filename.build\\(p, ''/output'', ''NC''\\); print\\(''输出:'', o\\); f = Filename.formats\\(''L1''\\); print\\(''格式:'', f\\)\")",
       "Bash(c:/miniconda3/envs/rs/python.exe:*)",
       "Bash(cmd /c \"dir F:\\\\ 2>nul | findstr YH1C\")",
-      "Bash(cmd:*)"
+      "Bash(cmd:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(dpkg -L hdf4-tools)",
+      "Bash(ncdump-hdf -h /mnt/e/CAL_LID_L2_05kmCLay-Standard-V4-51.2023-01-01T04-38-40ZN.hdf)",
+      "Bash(pip install pyhdf --break-system-packages -q)",
+      "Bash(ls /mnt/h/CAL/202301/*.hdf)",
+      "Bash(ls -la /mnt/h/H89/2022/07/01/0000/*.DAT.bz2)",
+      "Bash(bash app.sh test.json)"
     ]
   }
 }

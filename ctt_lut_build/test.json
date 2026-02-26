@@ -1,0 +1,9 @@
+{
+  "auxPath": "/mnt/d/auxdata/polar",
+  "primaryPath": "/mnt/h/CAL",
+  "himawariPath": "/mnt/h/H89",
+  "resultPath": "/mnt/e/output/polar/ctt_lut_build",
+  "resultJsonFile": "/mnt/e/output/polar/ctt_lut_build_result.json",
+  "resultLogFile": "/mnt/e/output/polar/ctt_lut_build_log.log",
+  "resultFlowFile": "/mnt/e/output/polar/ctt_lut_build_flow.json"
+}

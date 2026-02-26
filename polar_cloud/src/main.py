@@ -28,10 +28,10 @@ def main(primaryFile, geoFile, clmFile, tpproFile, resultPath, auxPath):
 
     # 文件名配置
     input_pattern = r"(?P<sgs>[^_]+)_(?P<satellite>[^_]+)_(?P<sensor>[^_]+)_(?P<yyyymmdd>\d{8})_(?P<HHMMSS>\d{6})_R(?P<resolution>\d+M)_(?P<level>[^.]+)\.(?P<ext>[^.]+)"
-    cth_template = "{rootpath}/{satellite}/{sensor}/CLD/{yyyy}/{yyyymmdd}/CTH_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
-    ctt_template = "{rootpath}/{satellite}/{sensor}/CLD/{yyyy}/{yyyymmdd}/CTT_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
-    clt_template = "{rootpath}/{satellite}/{sensor}/CLD/{yyyy}/{yyyymmdd}/CLT_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
-    clm_template = "{rootpath}/{satellite}/{sensor}/CLD/{yyyy}/{yyyymmdd}/CLM_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
+    cth_template = "{rootpath}/{satellite}/{sensor}/L2/CLD/{yyyy}/{yyyymmdd}/CTH_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
+    ctt_template = "{rootpath}/{satellite}/{sensor}/L2/CLD/{yyyy}/{yyyymmdd}/CTT_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
+    clt_template = "{rootpath}/{satellite}/{sensor}/L2/CLD/{yyyy}/{yyyymmdd}/CLT_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
+    clm_template = "{rootpath}/{satellite}/{sensor}/L2/CLD/{yyyy}/{yyyymmdd}/CLM_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
     output_formats = ["NC", "TIFF", "PNG"]
 
     # 解析输入文件名
