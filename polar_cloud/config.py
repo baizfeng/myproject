@@ -5,14 +5,16 @@
 """
 
 # ==================== 算法信息 ====================
-algorithm_name = "POLAR_L1"
-algorithm_description = "L1数据辐射定标算法"
+algorithm_name = "POLAR_CLOUD"
+algorithm_description = "云顶温度和云顶高度产品反演算法"
 key_steps = ["文件名定义", "数据读取", "数据处理", "数据输出"]
 
 # ==================== 输入字段定义 ====================
 INPUT = [
     "primaryFile",
     "geoFile",
+    "clmFile",
+    "tpproFile",
     "resultPath",
     "auxPath"
 ]

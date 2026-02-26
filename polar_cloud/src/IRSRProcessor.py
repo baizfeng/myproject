@@ -27,8 +27,8 @@ class IRSRProcessor:
     C2 = 1.4387752  # cm·K
 
     def __init__(self, l1_file, geo_file):
-        self.ds_l1 = xr.open_dataset(l1_file)
-        self.ds_geo = xr.open_dataset(geo_file)
+        self.ds_l1 = xr.open_dataset(l1_file, engine="h5netcdf")
+        self.ds_geo = xr.open_dataset(geo_file, engine="h5netcdf")
 
         # 核心数据
         self.earth_view = self.ds_l1['Earth_View'].values  # [band, line, pixel]

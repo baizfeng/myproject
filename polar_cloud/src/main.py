@@ -1,21 +1,38 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-算法主文件 - L1数据处理
+算法主文件 - L2云产品处理
 """
 import os
 import numpy as np
-from arspy import log, fjson, rjson, parse_name, build_names, build_mapinfo, save_tiff, save_netcdf, DrawMap
+from datetime import datetime
+from arspy import (
+    log,
+    fjson,
+    rjson,
+    parse_name,
+    build_names,
+    build_mapinfo,
+    save_tiff,
+    save_netcdf,
+)
+from arspy.qgsmap import DrawMap
 from .IRSRProcessor import IRSRProcessor
+from .cloudmask import CloudDetector
+from .ctt_retrieval import CTTRetrieval
+from .cth_retrieval import CTHRetrieval
 
 
-def main(primaryFile, geoFile, resultPath, auxPath):
+def main(primaryFile, geoFile, clmFile, tpproFile, resultPath, auxPath):
     """主算法函数"""
 
     # 文件名配置
-    input_pattern = r"(?P<site>[^_]+)_(?P<satellite>[^_]+)_(?P<sensor>[^_]+)_(?P<yyyymmdd>\d{8})_(?P<HHMMSS>\d{6})_R(?P<resolution>\d+M)_(?P<level>[^.]+)\.(?P<ext>[^.]+)"
-    output_template = "{rootpath}/{satellite}/{sensor}/{level}/{yyyy}/{yyyymmdd}/{satellite}_{sensor}_GBAL_{level}_{resolution}_GLL_{yyyymmdd}_{HHMMSS}.{format}"
-    output_formats = ["NC", "TIFF:IR11/IR12", "PNG"]
+    input_pattern = r"(?P<sgs>[^_]+)_(?P<satellite>[^_]+)_(?P<sensor>[^_]+)_(?P<yyyymmdd>\d{8})_(?P<HHMMSS>\d{6})_R(?P<resolution>\d+M)_(?P<level>[^.]+)\.(?P<ext>[^.]+)"
+    cth_template = "{rootpath}/{satellite}/{sensor}/CLD/{yyyy}/{yyyymmdd}/CTH_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
+    ctt_template = "{rootpath}/{satellite}/{sensor}/CLD/{yyyy}/{yyyymmdd}/CTT_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
+    clt_template = "{rootpath}/{satellite}/{sensor}/CLD/{yyyy}/{yyyymmdd}/CLT_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
+    clm_template = "{rootpath}/{satellite}/{sensor}/CLD/{yyyy}/{yyyymmdd}/CLM_P_{sgs}_{satellite}_{sensor}_GBAL_L2_GLL_{yyyymmdd}_{HHMMSS}_{resolution}.{format}"
+    output_formats = ["NC", "TIFF", "PNG"]
 
     # 解析输入文件名
     params = parse_name(primaryFile, input_pattern)
@@ -23,12 +40,16 @@ def main(primaryFile, geoFile, resultPath, auxPath):
 
     # 生成所有格式的输出路径
     yyyy = params.get("yyyymmdd", "")[:4]
-    names = build_names(params, output_template, output_formats, resultPath, yyyy=yyyy)
+    cth_names = build_names(params, cth_template, output_formats, resultPath, yyyy=yyyy)
+    ctt_names = build_names(params, ctt_template, output_formats, resultPath, yyyy=yyyy)
+    clt_names = build_names(params, clt_template, output_formats, resultPath, yyyy=yyyy)
+    clm_names = build_names(params, clm_template, output_formats, resultPath, yyyy=yyyy)
 
     # 生成绘图mapinfo信息
-    mapinfos = build_mapinfo(params, bands=['IR11', 'IR12'],
-                             titles=['卫星长波红外通道亮温(IR:10.8μm)', '卫星长波红外通道亮温(IR:12.0μm)'])
-
+    cth_mapinfos = build_mapinfo(params, titles="卫星云顶高度产品")
+    ctt_mapinfos = build_mapinfo(params, titles="卫星云顶温度产品")
+    clt_mapinfos = build_mapinfo(params, titles="卫星云类型产品")
+    clm_mapinfos = build_mapinfo(params, titles="卫星云掩膜产品")
     fjson("输出产品文件名预定义")
 
     proc = IRSRProcessor(primaryFile, geoFile)
@@ -37,172 +58,259 @@ def main(primaryFile, geoFile, resultPath, auxPath):
     bt_data = proc.calibrate([0, 1])  # [2, n_lines, n_pixels]
 
     # 批量读取辅助地理数据
-    geo_vars = ['LandSeaMask', 'LandCover', 'SensorZenith', 'SensorAzimuth', 'SolarAzimuth', 'SolarZenith']
+    geo_vars = ["LandSeaMask", "SensorZenith"]
     geo_data = proc.get_geodata_batch(geo_vars)
     fjson("地理数据读取完成")
 
-    # 合并所有数据后一次性投影: 亮温(2) + 辅助(6) = 8波段
-    # 使用NaN作为填充值，避免缩放后溢出，且不与有效数据冲突
-    all_data = np.concatenate([bt_data, np.stack([geo_data[name] for name in geo_vars])], axis=0)
-    projected, lon, lat = proc.reproject(all_data, resolution=0.005, radius_of_influence=5000, fill_value=np.nan)
+    # 合并所有数据后一次性投影: 亮温(2) + 辅助(2) = 4波段
+    all_data = np.concatenate(
+        [bt_data, np.stack([geo_data[name] for name in geo_vars])], axis=0
+    )
+    projected, lon, lat = proc.reproject(
+        all_data, resolution=0.005, radius_of_influence=5000, fill_value=np.nan
+    )
     # 关闭数据集
     proc.close()
 
     fjson("数据投影完成")
 
-    # 数据缩放处理（减小存储空间）
-    # IR: 亮温缩放100倍存储为uint16
-    ir_scaled = (projected[:2] * 100).astype(np.uint16)
-    ir_scaled[np.isnan(projected[:2])] = 65535  # 恢复填充值
-    # 角度数据: 缩放100倍存储为uint16
-    sensor_zenith = (projected[4] * 100).astype(np.uint16)
-    sensor_zenith[np.isnan(projected[4])] = 65535
-    sensor_azimuth = (projected[5] * 100).astype(np.uint16)
-    sensor_azimuth[np.isnan(projected[5])] = 65535
-    solar_azimuth = (projected[6] * 100).astype(np.uint16)
-    solar_azimuth[np.isnan(projected[6])] = 65535
-    solar_zenith = (projected[7] * 100).astype(np.uint16)
-    solar_zenith[np.isnan(projected[7])] = 65535
-    # 分类数据: 直接使用uint8
-    landsea_mask = projected[2].astype(np.uint8)
-    landsea_mask[np.isnan(projected[2])] = 255
-    land_cover = projected[3].astype(np.uint8)
-    land_cover[np.isnan(projected[3])] = 255
+    # ===== 云掩膜产品 =====
+    if clmFile == "":
+        detector = CloudDetector(
+            projected[0, :, :], projected[1, :, :], projected[2, :, :]
+        )
 
-    # TIFF波段元数据（含缩放因子和偏移）
-    tiff_metadata = [
-        {'description': 'BT 10.8μm', 'wavelength': '10.8', 'name': 'IR11', 'scale': '0.01', 'offset': '0', 'unit': 'K',
-         'fillvalue': 65535},
-        {'description': 'BT 12.0μm', 'wavelength': '12.0', 'name': 'IR12', 'scale': '0.01', 'offset': '0', 'unit': 'K',
-         'fillvalue': 65535},
-        {'description': 'LandSeaMask', 'name': 'LandSeaMask', 'scale': '1.0', 'offset': '0', 'unit': '1',
-         'fillvalue': 255},
-        {'description': 'LandCover', 'name': 'LandCover', 'scale': '1.0', 'offset': '0', 'unit': '1', 'fillvalue': 255},
-        {'description': 'SensorZenith', 'name': 'SensorZenith', 'scale': '0.01', 'offset': '0', 'unit': 'degrees',
-         'fillvalue': 65535},
-        {'description': 'SensorAzimuth', 'name': 'SensorAzimuth', 'scale': '0.01', 'offset': '0', 'unit': 'degrees',
-         'fillvalue': 65535},
-        {'description': 'SolarAzimuth', 'name': 'SolarAzimuth', 'scale': '0.01', 'offset': '0', 'unit': 'degrees',
-         'fillvalue': 65535},
-        {'description': 'SolarZenith', 'name': 'SolarZenith', 'scale': '0.01', 'offset': '0', 'unit': 'degrees',
-         'fillvalue': 65535}
-    ]
+        # 执行检测
+        cloud_mask = detector.detect(use_texture=False)
 
-    # 组装TIFF数据
-    tiff_data = np.stack([ir_scaled[0], ir_scaled[1], landsea_mask, land_cover,
-                          sensor_zenith, sensor_azimuth, solar_azimuth, solar_zenith])
+        # 保存CLM TIFF
+        save_tiff(
+            cloud_mask,
+            lon,
+            lat,
+            clm_names["TIFF"],
+            resolution=0.005,
+            fillvalue=255,
+            metadata=[
+                {
+                    "description": "0:clear,1:cloud,255:fillvalue",
+                    "name": "CLM",
+                    "scale": "1",
+                    "offset": "0",
+                    "unit": "",
+                    "fillvalue": 255,
+                }
+            ],
+        )
+        log(f"CLM TIFF文件已保存: {clm_names['TIFF']}")
 
-    # 保存TIFF
-    save_tiff(tiff_data, lon, lat, names["TIFF"], resolution=0.005, metadata=tiff_metadata)
-    log(f"TIFF文件已保存: {names["TIFF"]}")
+    # ===== 云顶温度反演 =====
+    lutfile = os.path.join(auxPath, "lut", "FY4B_LUT.csv")
+    ctt_retrieval = CTTRetrieval(lutfile)
 
-    # 准备NC数据字典（IR为3D，其他为2D）
-    nc_data_dict = {
-        'IR': ir_scaled,
-        'LandSeaMask': landsea_mask,
-        'LandCover': land_cover,
-        'SensorZenith': sensor_zenith,
-        'SensorAzimuth': sensor_azimuth,
-        'SolarAzimuth': solar_azimuth,
-        'SolarZenith': solar_zenith
-    }
+    ctt, thick_mask, thin_mask = ctt_retrieval.retrieve(
+        projected[0, :, :], projected[1, :, :], cloud_mask, projected[3, :, :]
+    )
 
-    # NC变量属性（包含填充值、有效值范围、缩放因子和偏移）
-    nc_var_attrs = {
-        'IR': {
-            'long_name': 'Brightness Temperature',
-            'units': 'K',
-            '_FillValue': '65535',
-            'valid_min': '0',
-            'valid_max': '40000',
-            'scale_factor': '0.01',
-            'add_offset': '0'
-        },
-        'LandSeaMask': {
-            'long_name': 'LandSeaMask',
-            'units': '1',
-            '_FillValue': '255',
-            'valid_min': '0',
-            'valid_max': '254',
-            'scale_factor': '1.0',
-            'add_offset': '0'
-        },
-        'LandCover': {
-            'long_name': 'LandCover',
-            'units': '1',
-            '_FillValue': '255',
-            'valid_min': '0',
-            'valid_max': '254',
-            'scale_factor': '1.0',
-            'add_offset': '0'
-        },
-        'SensorZenith': {
-            'long_name': 'SensorZenith',
-            'units': 'degrees',
-            '_FillValue': '65535',
-            'valid_min': '0',
-            'valid_max': '9000',
-            'scale_factor': '0.01',
-            'add_offset': '0'
-        },
-        'SensorAzimuth': {
-            'long_name': 'SensorAzimuth',
-            'units': 'degrees',
-            '_FillValue': '65535',
-            'valid_min': '0',
-            'valid_max': '36000',
-            'scale_factor': '0.01',
-            'add_offset': '0'
-        },
-        'SolarAzimuth': {
-            'long_name': 'SolarAzimuth',
-            'units': 'degrees',
-            '_FillValue': '65535',
-            'valid_min': '0',
-            'valid_max': '36000',
-            'scale_factor': '0.01',
-            'add_offset': '0'
-        },
-        'SolarZenith': {
-            'long_name': 'SolarZenith',
-            'units': 'degrees',
-            '_FillValue': '65535',
-            'valid_min': '0',
-            'valid_max': '18000',
-            'scale_factor': '0.01',
-            'add_offset': '0'
+    # 保存CTT TIFF
+    save_tiff(
+        ctt,
+        lon,
+        lat,
+        ctt_names["TIFF"],
+        resolution=0.005,
+        fillvalue=65535,
+        metadata=[
+            {
+                "description": "65534:clear,65535:fillvalue",
+                "name": "CTT",
+                "scale": "0.1",
+                "offset": "0",
+                "unit": "K",
+                "fillvalue": 65535,
+            }
+        ],
+    )
+    log(f"CTT TIFF文件已保存: {ctt_names['TIFF']}")
+
+    # 保存CTT NC
+    ctt_var_attrs = {
+        "CTT": {
+            "long_name": "Cloud Top Temperature",
+            "units": "K",
+            "_FillValue": "65535",
+            "valid_min": "0",
+            "valid_max": "65533",
+            "scale_factor": "0.1",
+            "add_offset": "0",
         }
     }
-
-    # NC全局属性
-    nc_global_attrs = {
-        'dataset_name': f"{params.get('satellite', '')}_{params.get('sensor', '')}_GBAL_L1",
-        'Project': 'Arspy_ai',
-        'Title': 'Global L1 Data Product',
-        'platform_ID': params.get('satellite', ''),
-        'instrument_ID': params.get('sensor', ''),
-        'processing_level': 'L1',
-        'date_created': params.get('yyyymmdd', '') + params.get('HHMMSS', ''),
-        'spatial_resolution': params.get('resolution', ''),
-        'time_coverage_start': params.get('yyyymmdd', '') + 'T' + params.get('HHMMSS', ''),
-        'time_coverage_end': params.get('yyyymmdd', '') + 'T' + params.get('HHMMSS', ''),
-        'Version_Of_Software': '1.0'
+    ctt_global_attrs = {
+        "dataset_name": f"{params.get('satellite', '')}_{params.get('sensor', '')}_GBAL_L2_CTT",
+        "Title": "Cloud Top Temperature Product",
+        "platform_ID": params.get("satellite", ""),
+        "instrument_ID": params.get("sensor", ""),
+        "processing_level": "L2",
+        "date_created": params.get("yyyymmdd", "") + params.get("HHMMSS", ""),
+        "spatial_resolution": params.get("resolution", ""),
+        "time_coverage_start": params.get("yyyymmdd", "")
+        + "T"
+        + params.get("HHMMSS", ""),
+        "time_coverage_end": params.get("yyyymmdd", "")
+        + "T"
+        + params.get("HHMMSS", ""),
     }
+    save_netcdf(
+        {"CTT": ctt},
+        lon,
+        lat,
+        ctt_names["NC"],
+        var_attrs=ctt_var_attrs,
+        global_attrs=ctt_global_attrs,
+    )
+    log(f"CTT NetCDF文件已保存: {ctt_names['NC']}")
 
-    # 保存NC
-    save_netcdf(nc_data_dict, lon, lat, names["NC"], var_attrs=nc_var_attrs, global_attrs=nc_global_attrs)
-    log(f"NetCDF文件已保存: {names["NC"]}")
+    # ===== 云类型产品 =====
+    clt = np.full_like(cloud_mask, 255, dtype=np.uint8)
+    clt[cloud_mask == 0] = 0  # 晴空
+    clt[thick_mask] = 1  # 厚云
+    clt[thin_mask] = 2  # 薄云
 
+    # 保存CLT TIFF
+    save_tiff(
+        clt,
+        lon,
+        lat,
+        clt_names["TIFF"],
+        resolution=0.005,
+        fillvalue=255,
+        metadata=[
+            {
+                "description": "0:clear,1:thick_cloud,2:thin_cloud,255:fillvalue",
+                "name": "CLT",
+                "scale": "1",
+                "offset": "0",
+                "unit": "",
+                "fillvalue": 255,
+            }
+        ],
+    )
+    log(f"CLT TIFF文件已保存: {clt_names['TIFF']}")
+
+    # ===== 云顶高度反演 =====
+    if tpproFile != "":
+        # 解析观测时间
+        hhmmss = params.get("HHMMSS", "000000")
+        yyyymmdd = params.get("yyyymmdd", "20250101")
+        obs_time = datetime(
+            int(yyyymmdd[:4]),
+            int(yyyymmdd[4:6]),
+            int(yyyymmdd[6:8]),
+            int(hhmmss[:2]),
+            int(hhmmss[2:4]),
+            int(hhmmss[4:6]),
+        )
+
+        cth_retrieval = CTHRetrieval(tpproFile)
+        cth = cth_retrieval.retrieve(ctt, lon, lat, obs_time, cloud_mask)
+        cth_retrieval.close()
+
+        # 保存CTH TIFF
+        save_tiff(
+            cth,
+            lon,
+            lat,
+            cth_names["TIFF"],
+            resolution=0.005,
+            fillvalue=65535,
+            metadata=[
+                {
+                    "description": "65534:clear,65535:fillvalue",
+                    "name": "CTH",
+                    "scale": "0.1",
+                    "offset": "0",
+                    "unit": "hPa",
+                    "fillvalue": 65535,
+                }
+            ],
+        )
+        log(f"CTH TIFF文件已保存: {cth_names['TIFF']}")
+
+        # 保存CTH NC
+        cth_var_attrs = {
+            "CTH": {
+                "long_name": "Cloud Top Height",
+                "units": "hPa",
+                "_FillValue": "65535",
+                "valid_min": "0",
+                "valid_max": "1200",
+                "scale_factor": "0.1",
+                "add_offset": "0",
+            }
+        }
+        cth_global_attrs = {
+            "dataset_name": f"{params.get('satellite', '')}_{params.get('sensor', '')}_GBAL_L2_CTH",
+            "Title": "Cloud Top Height Product",
+            "platform_ID": params.get("satellite", ""),
+            "instrument_ID": params.get("sensor", ""),
+            "processing_level": "L2",
+            "date_created": params.get("yyyymmdd", "") + params.get("HHMMSS", ""),
+            "spatial_resolution": params.get("resolution", ""),
+            "time_coverage_start": params.get("yyyymmdd", "")
+            + "T"
+            + params.get("HHMMSS", ""),
+            "time_coverage_end": params.get("yyyymmdd", "")
+            + "T"
+            + params.get("HHMMSS", ""),
+        }
+        save_netcdf(
+            {"CTH": cth},
+            lon,
+            lat,
+            cth_names["NC"],
+            var_attrs=cth_var_attrs,
+            global_attrs=cth_global_attrs,
+        )
+        log(f"CTH NetCDF文件已保存: {cth_names['NC']}")
+
+    # ===== 专题图输出 =====
     template = os.path.join(auxPath, "glob", "template.qgs")
-    ir11qml = os.path.join(auxPath, "style", "IR11.qml")
-    ir12qml = os.path.join(auxPath, "style", "IR12.qml")
+
+    clm_qml = os.path.join(auxPath, "style", "CLM.qml")
+    clt_qml = os.path.join(auxPath, "style", "CLT.qml")
+    ctt_qml = os.path.join(auxPath, "style", "CTT.qml")
+    cth_qml = os.path.join(auxPath, "style", "CTH.qml")
 
     draw = DrawMap()
-    draw.draw_single_map(names["TIFF"], names["PNG.IR11"], template, ir11qml, mapinfos["IR11"])
-    log("IR11产品专题图输出完成:" + names["PNG.IR11"])
 
-    draw.draw_single_map(names["TIFF"], names["PNG.IR12"], template, ir12qml, mapinfos["IR12"])
-    log("IR12产品专题图输出完成:" + names["PNG.IR12"])
+    # CLM专题图
+    draw.draw_single_map(
+        clm_names["TIFF"], clm_names["PNG"], template, clm_qml, clm_mapinfos
+    )
+    log(f"CLM专题图输出完成: {clm_names['PNG']}")
+
+    # CLT专题图
+    draw.draw_single_map(
+        clt_names["TIFF"], clt_names["PNG"], template, clt_qml, clt_mapinfos
+    )
+    log(f"CLT专题图输出完成: {clt_names['PNG']}")
+
+    # CTT专题图
+    draw.draw_single_map(
+        ctt_names["TIFF"], ctt_names["PNG"], template, ctt_qml, ctt_mapinfos
+    )
+    log(f"CTT专题图输出完成: {ctt_names['PNG']}")
+
+    # CTH专题图
+    if tpproFile != "":
+        draw.draw_single_map(
+            cth_names["TIFF"], cth_names["PNG"], template, cth_qml, cth_mapinfos
+        )
+        log(f"CTH专题图输出完成: {cth_names['PNG']}")
 
     # 保存结果信息到resultjson
-    rjson.info(names, result_path=resultPath, product_level="L1")
+    all_names = {
+        "CTT": ctt_names,
+        "CTH": cth_names if tpproFile != "" else None,
+    }
+    rjson.info(all_names, result_path=resultPath, product_level="L2")

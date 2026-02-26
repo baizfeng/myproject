@@ -2,8 +2,10 @@
   "auxPath": "/mnt/d/auxdata/polar",
   "primaryFile": "/mnt/d/data/ps/YH/BEI_YH1C_IRSR_20250102_232001_R0500M_L1.hdf",
   "geoFile": "/mnt/d/data/ps/YH/BEI_YH1C_IRSR_20250102_232001_GEO_L1.hdf",
+  "clmFile": "",
+  "tpproFile":"/mnt/d/data/ps/EC/reanalysis-era5-pressure-levels_20250131.grib",
   "resultPath": "/mnt/e/output/polar",
-  "resultJsonFile": "/mnt/e/output/polar/polar_l1_result.json",
-  "resultLogFile": "/mnt/e/output/polar/polar_l1_log.log",
-  "resultFlowFile": "/mnt/e/output/polar/polar_l1_flow.json"
+  "resultJsonFile": "/mnt/e/output/polar/polar_cloud_result.json",
+  "resultLogFile": "/mnt/e/output/polar/polar_cloud_log.log",
+  "resultFlowFile": "/mnt/e/output/polar/polar_cloud_flow.json"
 }
