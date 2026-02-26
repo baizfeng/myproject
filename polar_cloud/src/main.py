@@ -308,9 +308,19 @@ def main(primaryFile, geoFile, clmFile, tpproFile, resultPath, auxPath):
         )
         log(f"CTH专题图输出完成: {cth_names['PNG']}")
 
+        rjson.info(
+            cth_names,
+            result_path=resultPath,
+            product_level="L2",
+            product_id_eng="CTH",
+            product_id_chn="云顶高度",
+        )
+
     # 保存结果信息到resultjson
-    all_names = {
-        "CTT": ctt_names,
-        "CTH": cth_names if tpproFile != "" else None,
-    }
-    rjson.info(all_names, result_path=resultPath, product_level="L2")
+    rjson.info(
+        ctt_names,
+        result_path=resultPath,
+        product_level="L2",
+        product_id_eng="CTT",
+        product_id_chn="云顶温度",
+    )

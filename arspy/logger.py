@@ -169,9 +169,9 @@ class _RJsonHelper:
                 if isinstance(value, dict):
                     # 跳过mapinfo字典
                     continue
-                elif key.startswith("PNG."):
+                elif key.startswith("PNG"):
                     # PNG文件，添加到result
-                    band_name = key.replace("PNG.", "")
+                    band_name = key.replace("PNG", "")
                     pid_eng = product_id_eng if product_id_eng else (default_pid_eng if default_pid_eng else band_name)
                     pid_chn = product_id_chn if product_id_chn else (default_pid_chn if default_pid_chn else band_name)
                     file_path = self._remove_root_path(value, result_path) if result_path else value

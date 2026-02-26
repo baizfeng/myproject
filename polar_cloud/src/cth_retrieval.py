@@ -16,6 +16,13 @@ import xarray as xr
 from datetime import datetime
 from scipy.interpolate import RegularGridInterpolator
 
+# 导入日志函数（兼容不同环境）
+try:
+    from arspy import log
+except ImportError:
+    def log(msg):
+        print(f"[CTH] {msg}")
+
 
 class CTHRetrieval:
     """云顶高度反演类 - 基于温压廓线匹配
@@ -37,6 +44,7 @@ class CTHRetrieval:
         参数:
             tppro_file: 温压廓线文件路径 (grib格式)
         """
+        log("[CTH] Step 1: 开始加载温压廓线文件...")
         self.xds = xr.open_dataset(
             tppro_file,
             engine='cfgrib',
@@ -44,10 +52,14 @@ class CTHRetrieval:
         )
         self.t = self.xds.t
         self.pressure = self.xds.isobaricInhPa.values
+        log(f"[CTH]   气压层数: {len(self.pressure)}")
+        log(f"[CTH]   气压范围: {self.pressure.min()} - {self.pressure.max()} hPa")
 
         # 经度转到[-180, 180]
         self.t = self.t.assign_coords(longitude=(self.t.longitude + 180) % 360 - 180)
         self.t = self.t.sortby('longitude')
+        log(f"[CTH]   廓线网格: {len(self.t.latitude)} x {len(self.t.longitude)}")
+        log("[CTH] Step 1: 温压廓线加载完成")
 
     def _create_interpolators(self, t_at_time, prof_lat, prof_lon, n_levels):
         """预创建所有气压层的插值器
@@ -61,8 +73,11 @@ class CTHRetrieval:
         返回:
             interpolators: 插值器列表
         """
+        log(f"[CTH] Step 3: 开始创建插值器 (共{n_levels}层)...")
         interpolators = []
         for k in range(n_levels):
+            if (k + 1) % 50 == 0 or k == 0 or k == n_levels - 1:
+                log(f"[CTH]   创建插值器: {k+1}/{n_levels}")
             temp_data = t_at_time.isel(isobaricInhPa=k).values.astype(np.float32)
             interpolator = RegularGridInterpolator(
                 (prof_lat, prof_lon),
@@ -72,6 +87,7 @@ class CTHRetrieval:
                 fill_value=np.nan
             )
             interpolators.append(interpolator)
+        log("[CTH] Step 3: 插值器创建完成")
         return interpolators
 
     def _interpolate_to_grid(self, interpolators, lon, lat, height, width, chunk_size=500):
@@ -87,16 +103,28 @@ class CTHRetrieval:
             t_profile: 插值后的温度廓线 [n_levels, height, width]
         """
         n_levels = len(interpolators)
+        log(f"[CTH] Step 4: 开始空间插值 (目标网格: {height}x{width}, 共{n_levels}层)...")
+        log(f"[CTH]   预估内存: {n_levels * height * width * 4 / 1024 / 1024:.1f} MB")
+
         t_profile = np.full((n_levels, height, width), np.nan, dtype=np.float32)
 
         # 创建2D网格
         lon_grid, lat_grid = np.meshgrid(lon, lat)
 
         # 分块处理（避免内存溢出）
+        n_i_chunks = (height + chunk_size - 1) // chunk_size
+        n_j_chunks = (width + chunk_size - 1) // chunk_size
+        total_chunks = n_i_chunks * n_j_chunks
+        chunk_idx = 0
+
         for i_start in range(0, height, chunk_size):
             i_end = min(i_start + chunk_size, height)
             for j_start in range(0, width, chunk_size):
                 j_end = min(j_start + chunk_size, width)
+                chunk_idx += 1
+
+                if chunk_idx % 10 == 0 or chunk_idx == total_chunks:
+                    log(f"[CTH]   插值进度: {chunk_idx}/{total_chunks} ({100*chunk_idx/total_chunks:.1f}%)")
 
                 # 该块的经纬度
                 lon_chunk = lon_grid[i_start:i_end, j_start:j_end].flatten()
@@ -110,6 +138,7 @@ class CTHRetrieval:
                         i_end - i_start, j_end - j_start
                     )
 
+        log("[CTH] Step 4: 空间插值完成")
         return t_profile
 
     def _apply_inflection_point_mask(self, t_profile):
@@ -127,21 +156,57 @@ class CTHRetrieval:
             t_profile_masked: 应用掩膜后的温度廓线
             inflection_idx: 拐点索引 [height, width]
         """
-        # 用 np.inf 填充 nan，以便 argmin 能正确工作
-        t_filled = np.where(np.isnan(t_profile), np.inf, t_profile)
+        log("[CTH] Step 5: 应用温度拐点掩膜（对流层顶限制）...")
 
-        # 找到每个像素的温度最小值索引（拐点）
-        inflection_idx = np.argmin(t_filled, axis=0)  # [height, width]
+        n_levels, height, width = t_profile.shape
+        log(f"[CTH]   温度廓线尺寸: {n_levels}x{height}x{width}")
 
-        # 创建掩膜：气压层索引 > 拐点索引的位置设为 True
-        n_levels = t_profile.shape[0]
-        level_indices = np.arange(n_levels)[:, None, None]  # [n_levels, 1, 1]
-        mask = level_indices > inflection_idx[None, :, :]  # [n_levels, height, width]
+        # 分块处理避免创建大型 t_filled 数组
+        log("[CTH]   分块计算拐点索引...")
+        inflection_idx = np.full((height, width), n_levels - 1, dtype=np.int32)
+        chunk_size = 256  # 更小的分块
 
-        # 应用掩膜：高于对流层顶的设为 np.inf
-        t_profile_masked = np.where(mask, np.inf, t_profile)
+        for i_start in range(0, height, chunk_size):
+            i_end = min(i_start + chunk_size, height)
+            for j_start in range(0, width, chunk_size):
+                j_end = min(j_start + chunk_size, width)
 
-        return t_profile_masked, inflection_idx
+                # 提取当前块数据
+                t_chunk = t_profile[:, i_start:i_end, j_start:j_end]  # [n_levels, h_chunk, w_chunk]
+
+                # 用 inf 填充 nan（小块操作，内存友好）
+                t_chunk_filled = np.where(np.isnan(t_chunk), np.inf, t_chunk)
+
+                # 找到拐点索引
+                inflection_chunk = np.argmin(t_chunk_filled, axis=0)  # [h_chunk, w_chunk]
+                inflection_idx[i_start:i_end, j_start:j_end] = inflection_chunk
+
+        log(f"[CTH]   拐点索引范围: {inflection_idx.min()} - {inflection_idx.max()}")
+
+        # 分块应用掩膜
+        log("[CTH]   分块应用拐点掩膜...")
+        for i_start in range(0, height, chunk_size):
+            i_end = min(i_start + chunk_size, height)
+            for j_start in range(0, width, chunk_size):
+                j_end = min(j_start + chunk_size, width)
+
+                # 当前块的拐点索引
+                inflection_chunk = inflection_idx[i_start:i_end, j_start:j_end]
+                max_inflection = np.max(inflection_chunk)
+
+                # 对每个气压层，高于拐点的设为 np.inf
+                for k in range(n_levels):
+                    if k > max_inflection:  # 优化：如果当前层高于所有拐点，全部设为inf
+                        t_profile[k, i_start:i_end, j_start:j_end] = np.inf
+                    else:
+                        # 只将高于当前像素拐点的位置设为 np.inf
+                        mask = k > inflection_chunk
+                        t_profile[k, i_start:i_end, j_start:j_end] = np.where(
+                            mask, np.inf, t_profile[k, i_start:i_end, j_start:j_end]
+                        )
+
+        log("[CTH] Step 5: 温度拐点掩膜完成")
+        return t_profile, inflection_idx
 
     def _match_pressure_with_inflection(self, t_profile, ctt_work, cloud_mask, inflection_idx,
                                         chunk_size=512):
@@ -159,15 +224,25 @@ class CTHRetrieval:
         """
         n_levels = len(self.pressure)
         height, width = ctt_work.shape
+        log(f"[CTH] Step 7: 开始气压匹配 (网格: {height}x{width}, 分块大小: {chunk_size})...")
 
         # 初始化输出数组
         cth = np.full((height, width), self.FILL_VALUE, dtype=np.float32)
 
         # 分块处理
+        n_i_chunks = (height + chunk_size - 1) // chunk_size
+        n_j_chunks = (width + chunk_size - 1) // chunk_size
+        total_chunks = n_i_chunks * n_j_chunks
+        chunk_idx = 0
+
         for i_start in range(0, height, chunk_size):
             i_end = min(i_start + chunk_size, height)
             for j_start in range(0, width, chunk_size):
                 j_end = min(j_start + chunk_size, width)
+                chunk_idx += 1
+
+                if chunk_idx % 20 == 0 or chunk_idx == total_chunks:
+                    log(f"[CTH]   气压匹配进度: {chunk_idx}/{total_chunks} ({100*chunk_idx/total_chunks:.1f}%)")
 
                 # 提取当前块的数据
                 t_profile_chunk = t_profile[:, i_start:i_end, j_start:j_end]
@@ -244,6 +319,7 @@ class CTHRetrieval:
                 # 将结果写回大数组
                 cth[i_start:i_end, j_start:j_end] = cth_chunk
 
+        log("[CTH] Step 7: 气压匹配完成")
         return cth
 
     def retrieve(self, ctt, lon, lat, obs_time, cloud_mask):
@@ -258,11 +334,17 @@ class CTHRetrieval:
         返回:
             cth: 云顶气压(uint16, 0.1hPa单位), 晴空=65534, 无效=65535
         """
+        log(f"[CTH] ========== 开始CTH反演 ==========")
+        log(f"[CTH] CTT尺寸: {ctt.shape}, lon: {len(lon)}, lat: {len(lat)}")
+        log(f"[CTH] 观测时间: {obs_time}")
+
         # 1. 匹配时刻
+        log("[CTH] Step 2: 匹配观测时刻...")
         times = self.t.time.values
         time_diffs = [abs((obs_time - datetime.utcfromtimestamp(t.astype('int64') / 1e9)).total_seconds())
                       for t in times]
         time_idx = np.argmin(time_diffs)
+        log(f"[CTH]   匹配到时刻索引: {time_idx}, 时间差: {time_diffs[time_idx]:.0f}秒")
 
         # 选择指定时刻的数据
         t_at_time = self.t.isel(time=time_idx)
@@ -283,16 +365,22 @@ class CTHRetrieval:
         t_profile_masked, inflection_idx = self._apply_inflection_point_mask(t_profile)
 
         # 5. 准备CTT数据
+        log("[CTH] Step 6: 准备CTT工作数据...")
         ctt_work = ctt.copy().astype(np.float32) / 10.0  # 转换为K
         ctt_work[(ctt_work >= self.CLEAR_SKY * 0.1) | (ctt_work >= self.FILL_VALUE * 0.1)] = np.nan
+        valid_ctt_count = np.sum(~np.isnan(ctt_work))
+        log(f"[CTH]   有效CTT像素数: {valid_ctt_count} / {height*width}")
 
         # 6. 向量化气压匹配
         cloud_bool = (cloud_mask == 1)
+        cloud_count = np.sum(cloud_bool)
+        log(f"[CTH]   云像素数: {cloud_count}")
         cth = self._match_pressure_with_inflection(
             t_profile_masked, ctt_work, cloud_bool, inflection_idx
         )
 
         # 7. 转换为uint16输出格式 (0.1hPa单位)
+        log("[CTH] Step 8: 转换输出格式...")
         cth_out = np.full_like(cloud_mask, self.FILL_VALUE, dtype=np.uint16)
 
         # 有效云区：气压*10
@@ -301,6 +389,16 @@ class CTHRetrieval:
 
         # 晴空区域
         cth_out[cloud_mask == 0] = self.CLEAR_SKY
+
+        # 统计输出结果
+        valid_out = np.sum((cth_out != self.FILL_VALUE) & (cth_out != self.CLEAR_SKY))
+        clear_out = np.sum(cth_out == self.CLEAR_SKY)
+        invalid_out = np.sum(cth_out == self.FILL_VALUE)
+        log(f"[CTH]   输出统计 - 有效: {valid_out}, 晴空: {clear_out}, 无效: {invalid_out}")
+
+        # 释放大数组内存
+        del t_profile, t_profile_masked, cth
+        log("[CTH] ========== CTH反演完成 ==========")
 
         return cth_out
 
