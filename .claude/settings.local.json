@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"c:\\\\miniconda3\\\\envs\\\\rs\\\\python.exe\" -c \"from arspy.naming import parse_input_file, FilenameGenerator; parsed = parse_input_file\\(''D:/data/ps/YH/BEI_YH1C_IRSR_20250102_232001_R0500M_L1.hdf'', ''{site}_{sensor}_{sensor}_{yyyymmdd}_{HHMMSS}_{resolution}_{level}.{ext}''\\); gen = FilenameGenerator\\(''{rootpath}/{product}/{region}/{satellite}/{sensor}/{yyyy}/{yyyymmdd}/{product}_{region}_{level}_{satellite}_{sensor}_{resolution}_GLL_{period}_{datatime}.{format}'', parsed\\); outputs = gen.generate_batch\\(products=[{''name'': ''L1'', ''region'': [''GBAL''], ''level'': ''L1'', ''period'': ''HHMM'', ''formats'': [''NC'', ''PNG'']}], rootpath=''E:/output''\\); import pprint; pprint.pprint\\(outputs\\)\")",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "Bash(python:*)",
+      "Bash(c:/miniconda3/envs/rs/python.exe -c \"import sys; sys.path.insert\\(0, ''e:/hxcode/Arspy_ai''\\); from arspy import Filename; print\\(Filename.parse\\(''BEI_YH1C_IRSR_20250102_232001_R0500M_L1.hdf''\\)\\)\")",
+      "Bash(c:/miniconda3/envs/rs/python.exe -c \"import sys; sys.path.insert\\(0, ''e:/hxcode/Arspy_ai''\\); from arspy import Filename; p = Filename.parse\\(''BEI_YH1C_IRSR_20250102_232001_R0500M_L1.hdf''\\); print\\(''解析:'', p\\); o = Filename.build\\(p, ''/output'', ''NC''\\); print\\(''输出:'', o\\); f = Filename.formats\\(''L1''\\); print\\(''格式:'', f\\)\")",
+      "Bash(c:/miniconda3/envs/rs/python.exe:*)",
+      "Bash(cmd /c \"dir F:\\\\ 2>nul | findstr YH1C\")",
+      "Bash(cmd:*)"
+    ]
+  }
+}
