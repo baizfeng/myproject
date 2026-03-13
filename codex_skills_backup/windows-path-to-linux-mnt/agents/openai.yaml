@@ -1,0 +1,4 @@
+interface:
+  display_name: "Windows Path Mapper"
+  short_description: "Map Windows paths to /mnt Linux paths"
+  default_prompt: "Convert incoming Windows-style absolute paths to Linux /mnt/<drive>/... format."

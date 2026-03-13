@@ -1,0 +1,191 @@
+<mxfile host="app.diagrams.net" version="29.6.1">
+  <diagram id="flowchart-infrared-calibration-v3" name="流程图">
+    <mxGraphModel dx="1843" dy="995" grid="1" gridSize="10" guides="1"
+                  tooltips="1" connect="1" arrows="1" fold="1" page="1"
+                  pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===== 节点定义 ===== -->
+
+        <!-- 开始：47×47，中心X=587 → x=563 -->
+        <mxCell id="START" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;" value="开始" vertex="1">
+          <mxGeometry height="47" width="47" x="563" y="170" as="geometry" />
+        </mxCell>
+
+        <!-- 输入1：极轨卫星L1数据，约9字×14+50=176，高39 -->
+        <mxCell id="INPUT_1" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;fixedSize=1;strokeWidth=2;whiteSpace=wrap;" value="极轨卫星 L1 数据" vertex="1">
+          <mxGeometry height="39" width="176" x="165" y="260" as="geometry" />
+        </mxCell>
+
+        <!-- 输入2：静止卫星L1数据，约9字×14+50=176，高39 -->
+        <mxCell id="INPUT_2" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;fixedSize=1;strokeWidth=2;whiteSpace=wrap;" value="静止卫星 L1 数据" vertex="1">
+          <mxGeometry height="39" width="176" x="165" y="320" as="geometry" />
+        </mxCell>
+
+        <!-- PROC_1：匹配样本准备，最长行约22字→22×14+50=358→取360，3行→3×24+30=102→取100 -->
+        <!-- 中心Y=(260+19+320+19)/2=309，PROC_1中心Y=309 → y=309-50=259 → y=257 -->
+        <mxCell id="PROC_1" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="匹配样本准备&#xa;(统一投影、网格重采样、时空筛选)" vertex="1">
+          <mxGeometry height="78" width="300" x="437" y="260" as="geometry" />
+        </mxCell>
+
+        <!-- 质量控制分组框：4个子节点各宽约190，间距30，左右边距各30 -->
+        <!-- 分组框宽 = 30 + 4×190 + 3×30 + 30 = 30+760+90+30 = 910 -->
+        <!-- 分组框高 = 子节点高86 + 上边距35 + 下边距20 = 141 → 取150 -->
+        <!-- x = 587 - 910/2 = 587-455 = 132 -->
+        <!-- y = PROC_1.y + PROC_1.height + 30 = 260+78+30 = 368 -->
+        <mxCell id="GROUP_QC" parent="1" style="whiteSpace=wrap;strokeWidth=2;verticalAlign=top;" value="质量控制" vertex="1">
+          <mxGeometry height="150" width="910" x="132" y="368" as="geometry" />
+        </mxCell>
+
+        <!-- 子节点1：3行文本，宽190，高86，x=30，y=35（相对GROUP） -->
+        <mxCell id="SUB_QC_1" parent="GROUP_QC" style="whiteSpace=wrap;strokeWidth=2;" value="（1）星下点距离约束&#xa;计算观测天顶角&#xa;静止卫星 VZA ≤ 35°" vertex="1">
+          <mxGeometry height="86" width="190" x="30" y="35" as="geometry" />
+        </mxCell>
+
+        <!-- 子节点2：x = 30+190+30 = 250 -->
+        <mxCell id="SUB_QC_2" parent="GROUP_QC" style="whiteSpace=wrap;strokeWidth=2;" value="（2）空间均匀性筛选&#xa;3×3 环境场标准差/均值&#xa;比值 &lt; 0.01" vertex="1">
+          <mxGeometry height="86" width="190" x="250" y="35" as="geometry" />
+        </mxCell>
+
+        <!-- 子节点3：x = 250+190+30 = 470 -->
+        <mxCell id="SUB_QC_3" parent="GROUP_QC" style="whiteSpace=wrap;strokeWidth=2;" value="（3）几何一致性约束&#xa;两星 VZA 余弦差异&#xa;控制在 1% 以内" vertex="1">
+          <mxGeometry height="86" width="190" x="470" y="35" as="geometry" />
+        </mxCell>
+
+        <!-- 子节点4：x = 470+190+30 = 690 -->
+        <mxCell id="SUB_QC_4" parent="GROUP_QC" style="whiteSpace=wrap;strokeWidth=2;" value="（4）亮温范围控制&#xa;有效亮温 200K-320K&#xa;过滤物理异常值" vertex="1">
+          <mxGeometry height="86" width="190" x="690" y="35" as="geometry" />
+        </mxCell>
+
+        <!-- PROC_2：偏差建模与平滑，3行，最长约20字→330，高=3×24+30=102 -->
+        <!-- y = GROUP.y + GROUP.height + 30 = 368+150+30 = 548 -->
+        <mxCell id="PROC_2" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="偏差建模与平滑&#xa;累积 ≥10 天高质量匹配样本对&#xa;鲁棒线性回归建模 + 7 日滑动平均" vertex="1">
+          <mxGeometry height="86" width="330" x="422" y="548" as="geometry" />
+        </mxCell>
+
+        <!-- PROC_3：订正与评估，3行，最长约22字→358→取340，高86 -->
+        <!-- y = 548+86+30 = 664 -->
+        <mxCell id="PROC_3" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="订正与评估&#xa;应用订正系数补偿亮温&#xa;读取 295K-305K RMSE 并验证 ≤ 0.7K" vertex="1">
+          <mxGeometry height="86" width="340" x="417" y="664" as="geometry" />
+        </mxCell>
+
+        <!-- 折点X = PROC_3.x + PROC_3.width + 30 = 417+340+30 = 787 -->
+        <!-- OUTPUT_1: y = PROC_3.y + 10 = 674, x = 787+10 = 797 -->
+        <mxCell id="OUTPUT_1" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;fixedSize=1;strokeWidth=2;whiteSpace=wrap;" value="输出：订正后亮温" vertex="1">
+          <mxGeometry height="39" width="190" x="797" y="674" as="geometry" />
+        </mxCell>
+
+        <!-- OUTPUT_2: y = 674+39+20 = 733 -->
+        <mxCell id="OUTPUT_2" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;fixedSize=1;strokeWidth=2;whiteSpace=wrap;" value="输出：评估结果" vertex="1">
+          <mxGeometry height="39" width="190" x="797" y="733" as="geometry" />
+        </mxCell>
+
+        <!-- 结束：y = PROC_3.y + PROC_3.height + 30 = 664+86+30 = 780 -->
+        <mxCell id="END" parent="1" style="ellipse;aspect=fixed;strokeWidth=2;whiteSpace=wrap;" value="结束" vertex="1">
+          <mxGeometry height="47" width="47" x="563" y="790" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 连线定义（全部使用 orthogonalEdgeStyle）===== -->
+
+        <!-- START → PROC_1 垂直向下 -->
+        <mxCell id="EDGE_START_P1" edge="1" parent="1" source="START" target="PROC_1"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- PROC_1 → GROUP_QC 垂直向下 -->
+        <mxCell id="EDGE_P1_QC" edge="1" parent="1" source="PROC_1" target="GROUP_QC"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- GROUP_QC → PROC_2 垂直向下 -->
+        <mxCell id="EDGE_QC_P2" edge="1" parent="1" source="GROUP_QC" target="PROC_2"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- PROC_2 → PROC_3 垂直向下 -->
+        <mxCell id="EDGE_P2_P3" edge="1" parent="1" source="PROC_2" target="PROC_3"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- PROC_3 → END 垂直向下 -->
+        <mxCell id="EDGE_P3_END" edge="1" parent="1" source="PROC_3" target="END"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- QC 内部水平箭头（parent=GROUP_QC，使用 orthogonal） -->
+        <mxCell id="EDGE_QC_12" edge="1" parent="GROUP_QC" source="SUB_QC_1" target="SUB_QC_2"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="EDGE_QC_23" edge="1" parent="GROUP_QC" source="SUB_QC_2" target="SUB_QC_3"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="EDGE_QC_34" edge="1" parent="GROUP_QC" source="SUB_QC_3" target="SUB_QC_4"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 输入节点连接：汇合点X = INPUT右边 + 20 = 165+176+20 = 361 -->
+        <!-- INPUT_1中心Y = 260+19 = 279, INPUT_2中心Y = 320+19 = 339 -->
+        <!-- 两输入中间Y = (279+339)/2 = 309 = PROC_1中心Y(260+39=299) ≈ 299 -->
+        <!-- 连线1：INPUT_1右→INPUT_2右，经折点X=361 -->
+        <mxCell id="EDGE_IN_ALIGN" edge="1" parent="1" source="INPUT_1" target="INPUT_2"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;endArrow=none;endFill=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="361" y="279" />
+              <mxPoint x="361" y="339" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线2：汇合点(361,309) → PROC_1左侧 -->
+        <mxCell id="EDGE_IN_PROC" edge="1" parent="1" target="PROC_1"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="361" y="299" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 输出节点连接：折点X=787, PROC_3中心Y=664+43=707 -->
+        <!-- OUTPUT_1中心Y=674+19=693, OUTPUT_2中心Y=733+19=752 -->
+
+        <!-- 边1：PROC_3右侧 → 折点(787,707)，无箭头 -->
+        <mxCell id="EDGE_P3_TURN" edge="1" parent="1" source="PROC_3"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;endArrow=none;endFill=0;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="787" y="707" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 边2：折点(787,693) → OUTPUT_1左侧，有箭头 -->
+        <mxCell id="EDGE_TURN_O1" edge="1" parent="1" target="OUTPUT_1"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="787" y="693" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 边3：折点(787,693) → 折点(787,752) → OUTPUT_2左侧，有箭头 -->
+        <mxCell id="EDGE_TURN_O2" edge="1" parent="1" target="OUTPUT_2"
+          style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=block;endFill=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="787" y="693" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="787" y="752" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

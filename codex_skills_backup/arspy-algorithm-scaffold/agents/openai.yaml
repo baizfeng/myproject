@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arspy Algorithm Scaffold"
+  short_description: "Scaffold new arspy algorithm folders from templates."
+  default_prompt: "Create an arspy algorithm scaffold named <algorithm_slug> with inputs <comma-separated input_fields>."

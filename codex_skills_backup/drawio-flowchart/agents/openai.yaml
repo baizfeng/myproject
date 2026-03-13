@@ -1,0 +1,4 @@
+interface:
+  display_name: "DrawIO Flowchart"
+  short_description: "根据文字描述生成标准工程风格的 DrawIO 流程图"
+  default_prompt: "Use $drawio-flowchart to convert my process description into a complete editable .drawio flowchart."
